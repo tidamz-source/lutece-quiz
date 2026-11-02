@@ -1,0 +1,4 @@
+Lutèce Quiz
+
+Double-clique sur index.html (dans Chrome de préférence).
+Documentation complète : source/README.md
