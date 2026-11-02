@@ -496,6 +496,12 @@ body.player[data-res] .decor { display: none; }
 .net-error b { font-size: 1.3rem; }
 .net-error small { opacity: .75; overflow-wrap: anywhere; }
 
+/* aperçu */
+.preview-pill { display: inline-flex; align-items: center; gap: .4em; background: var(--c-blue); color: #fff; font-weight: 600; font-size: .9rem; padding: .3em .8em; border-radius: 99px; }
+.qnav { display: inline-flex; align-items: center; gap: .3rem; margin-left: .4rem; }
+.qnav select { max-width: 260px; font-size: .9rem; }
+.bar-l { flex-wrap: wrap; min-width: 0; }
+
 </style>
   <script>
 //---------------------------------------------------------------------
@@ -2810,12 +2816,13 @@ var LEADERBOARD_EVERY = C.leaderboardEvery || 5;
 var AVATAR_COUNT = C.avatarCount || 30;
 
 // js/net.js
-var MODE = FIREBASE_CONFIG && FIREBASE_CONFIG.databaseURL ? "firebase" : "local";
+var PREVIEW = new URLSearchParams(location.search).get("preview") === "1";
+var MODE = PREVIEW ? "preview" : FIREBASE_CONFIG && FIREBASE_CONFIG.databaseURL ? "firebase" : "local";
 var api = null;
 async function getDB() {
   if (!api) {
     try {
-      api = MODE === "firebase" ? await firebaseDB() : localDB();
+      api = MODE === "firebase" ? await firebaseDB() : localDB(MODE === "local");
     } catch (e) {
       document.body.insertAdjacentHTML("beforeend", `<div class="net-error"><b>Connexion impossible</b>
         <span>V\xE9rifie ta connexion internet et la config Firebase dans config.js.</span><small>${String(e?.message || e).replace(/</g, "&lt;")}</small></div>`);
@@ -2839,12 +2846,14 @@ async function firebaseDB() {
     now: () => F.serverTimestamp()
   };
 }
-function localDB() {
+function localDB(shared = true) {
   const KEY = "quizlive-local-db";
-  const ch = new BroadcastChannel("quizlive-local");
+  const ch = shared ? new BroadcastChannel("quizlive-local") : { postMessage() {
+  } };
   const listeners = /* @__PURE__ */ new Set();
   const parts = (p) => p.split("/").filter(Boolean);
   const read = () => {
+    if (!shared) return {};
     try {
       return JSON.parse(localStorage.getItem(KEY)) || {};
     } catch {
@@ -2889,7 +2898,7 @@ function localDB() {
   const write = (ops) => {
     ops = ops.map(([p, v]) => [p, resolve(v)]);
     apply(ops);
-    localStorage.setItem(KEY, JSON.stringify(mem));
+    if (shared) localStorage.setItem(KEY, JSON.stringify(mem));
     ch.postMessage({ t: "ops", ops });
     notify();
   };
@@ -2946,6 +2955,7 @@ var ICON = {
   back: ic('<path d="M15 5l-7 7 7 7"/>'),
   next: ic('<path d="M9 5l7 7-7 7"/>'),
   play: ic('<path d="M7 5v14l11-7z" fill="currentColor"/>'),
+  eye: ic('<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>'),
   full: ic('<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>')
 };
 var esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -3005,7 +3015,8 @@ async function mediaURL(media) {
 decor();
 var stage = $("#stage");
 var bar = $("#bar");
-var quizId = new URLSearchParams(location.search).get("quiz");
+var params = new URLSearchParams(location.search);
+var quizId = params.get("quiz");
 var quiz = quizId ? await getQuiz(quizId) : null;
 if (!quiz) {
   stage.innerHTML = `<div class="center-msg">${star("scheme", "msg-star")}<h1>Quiz introuvable</h1><a class="btn primary" href="index.html">Retour aux quiz</a></div>`;
@@ -3030,7 +3041,9 @@ async function main() {
   let closing = false;
   let primary = null;
   let pod = { seq: [], step: 0 };
+  let botTimers = [];
   const seen = /* @__PURE__ */ new Set();
+  const editorURL = `index.html#/edit/${quiz.id}`;
   if (MODE === "local") await db.remove("rooms");
   await db.set(R, { state: { phase: "lobby", title: quiz.title, total }, createdAt: db.now() });
   db.on(`${R}/players`, (v) => {
@@ -3039,6 +3052,30 @@ async function main() {
     if (phase === "question") checkAllAnswered();
     setBar();
   });
+  const BOTS = ["Camille", "Hugo", "In\xE8s", "Lucas", "Manon", "Noah", "Jade", "Louis"];
+  function scheduleBots(i, q) {
+    clearBots();
+    const max = Math.min(q.time * 0.85, 8) * 1e3;
+    BOTS.forEach((_, b) => {
+      const choice = Math.random() < 0.6 ? q.correct : Math.floor(Math.random() * q.answers.length);
+      botTimers.push(setTimeout(() => {
+        if (phase === "question" && qi === i) db.set(`${R}/answers/${i}/bot${b}`, { choice, at: db.now() });
+      }, 600 + Math.random() * max));
+    });
+  }
+  function clearBots() {
+    botTimers.forEach(clearTimeout);
+    botTimers = [];
+  }
+  function jumpTo(i) {
+    if (i < 0 || i >= total) return;
+    clearInterval(tick);
+    clearBots();
+    unsubAns?.();
+    unsubAns = null;
+    document.querySelectorAll("video, audio").forEach((m) => m.pause());
+    startQuestion(i);
+  }
   const nPlayers = () => Object.keys(players).length;
   const ranked = () => Object.entries(players).sort((a, b) => (b[1].score || 0) - (a[1].score || 0));
   const isLast = () => qi + 1 >= total;
@@ -3058,7 +3095,7 @@ async function main() {
         return ["Question suivante", () => startQuestion(qi + 1)];
       case "end": {
         const k = pod.seq[pod.step];
-        return k === void 0 ? ["Nouvelle partie", () => location.reload()] : [`R\xE9v\xE9ler la ${["1re", "2e", "3e"][k]} place`, revealPodium];
+        return k === void 0 ? [PREVIEW ? "Rejouer l\u2019aper\xE7u" : "Nouvelle partie", () => location.reload()] : [`R\xE9v\xE9ler la ${["1re", "2e", "3e"][k]} place`, revealPodium];
       }
     }
   }
@@ -3068,17 +3105,43 @@ async function main() {
     primary = disabled ? null : fn;
     const showAV = phase === "reveal" && answerMedia[qi];
     bar.innerHTML = `
-      <div class="bar-l">${logo()}<span class="bar-brand">Lut\xE8ce <b>Quiz</b></span><span class="bar-code">${code}</span>
-        <span class="muted">${n} joueur${n > 1 ? "s" : ""}${!["lobby", "end"].includes(phase) ? ` \xB7 Q${qi + 1}/${total}` : ""}</span></div>
+      <div class="bar-l">${logo()}<span class="bar-brand">Lut\xE8ce <b>Quiz</b></span>
+        ${PREVIEW ? `<span class="preview-pill">${ICON.eye} Aper\xE7u</span>` : `<span class="bar-code">${code}</span>`}
+        <span class="muted">${PREVIEW ? `${n} faux joueurs` : `${n} joueur${n > 1 ? "s" : ""}`}${!["lobby", "end"].includes(phase) ? ` \xB7 Q${qi + 1}/${total}` : ""}</span>
+        ${PREVIEW ? `<span class="qnav">
+          <button class="icon-btn" id="qprev" title="Question pr\xE9c\xE9dente" ${qi <= 0 ? "disabled" : ""}>${ICON.back}</button>
+          <select id="qjump" aria-label="Aller \xE0 la question">${quiz.questions.map((q, i) => `<option value="${i}" ${i === qi ? "selected" : ""}>Q${i + 1} \xB7 ${esc(q.text.slice(0, 40) || "Sans texte")}</option>`).join("")}</select>
+          <button class="icon-btn" id="qnext" title="Question suivante" ${qi >= total - 1 ? "disabled" : ""}>${ICON.next}</button>
+          <button class="btn ghost sm" id="qend" title="Aller directement aux r\xE9sultats">Podium</button>
+        </span>` : ""}</div>
       <div class="bar-r">
         <button class="icon-btn" id="fs" title="Plein \xE9cran (F)">${ICON.full}</button>
-        <a class="btn ghost sm" href="index.html" id="quit">Quitter</a>
+        <a class="btn ghost sm" href="${PREVIEW ? editorURL : "index.html"}" id="quit">${PREVIEW ? "Fermer l\u2019aper\xE7u" : "Quitter"}</a>
         ${showAV ? `<button class="btn" id="av">${ICON.video} Vid\xE9o r\xE9ponse</button>` : ""}
         <button class="btn primary" id="go" ${disabled ? "disabled" : ""} title="Espace / Entr\xE9e">${label} ${ICON.next}</button>
       </div>`;
     $("#go").onclick = () => primary?.();
     $("#fs").onclick = toggleFS;
     $("#av")?.addEventListener("click", showAnswerVideo);
+    if (PREVIEW) {
+      $("#qprev").onclick = () => jumpTo(qi - 1);
+      $("#qnext").onclick = () => jumpTo(qi + 1);
+      $("#qjump").onchange = (e) => jumpTo(+e.target.value);
+      $("#qend").onclick = () => {
+        clearInterval(tick);
+        clearBots();
+        unsubAns?.();
+        unsubAns = null;
+        showResults();
+      };
+      $("#quit").onclick = (e) => {
+        if (window.opener) {
+          e.preventDefault();
+          window.close();
+        }
+      };
+      return;
+    }
     $("#quit").onclick = (e) => {
       if (phase !== "end" && phase !== "lobby" && !confirm("Quitter la partie en cours ?")) {
         e.preventDefault();
@@ -3090,7 +3153,12 @@ async function main() {
   const toggleFS = () => document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen().catch(() => {
   });
   document.addEventListener("keydown", (e) => {
-    if (e.target.matches("input, textarea")) return;
+    if (e.target.matches("input, textarea, select")) return;
+    if (PREVIEW && e.key === "ArrowLeft") {
+      e.preventDefault();
+      jumpTo(qi - 1);
+      return;
+    }
     if (e.code === "Space" || e.key === "Enter" || e.key === "ArrowRight") {
       e.preventDefault();
       primary?.();
@@ -3206,6 +3274,7 @@ async function main() {
       updateTimer(left / 1e3, q.time);
       if (left <= 0) closeQuestion();
     }, 100);
+    if (PREVIEW) scheduleBots(i, q);
     $("#ma")?.play().catch(() => {
     });
   }
@@ -3253,6 +3322,7 @@ async function main() {
     if (phase !== "question" || closing) return;
     closing = true;
     clearInterval(tick);
+    clearBots();
     unsubAns?.();
     unsubAns = null;
     $("#ma")?.pause();
@@ -3388,7 +3458,17 @@ async function main() {
     }
     box.innerHTML = html;
   }
-  renderLobby();
+  if (PREVIEW) {
+    const upd = {};
+    BOTS.forEach((name, i) => {
+      upd[`players/bot${i}`] = { name, avatar: i * 7 % AVATAR_COUNT, score: 0, joinedAt: i };
+    });
+    await db.update(R, upd);
+    const start = Math.min(Math.max(0, +params.get("q") || 0), total - 1);
+    startQuestion(start);
+  } else {
+    renderLobby();
+  }
 }
 
 </script>

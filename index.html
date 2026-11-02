@@ -496,6 +496,12 @@ body.player[data-res] .decor { display: none; }
 .net-error b { font-size: 1.3rem; }
 .net-error small { opacity: .75; overflow-wrap: anywhere; }
 
+/* aperçu */
+.preview-pill { display: inline-flex; align-items: center; gap: .4em; background: var(--c-blue); color: #fff; font-weight: 600; font-size: .9rem; padding: .3em .8em; border-radius: 99px; }
+.qnav { display: inline-flex; align-items: center; gap: .3rem; margin-left: .4rem; }
+.qnav select { max-width: 260px; font-size: .9rem; }
+.bar-l { flex-wrap: wrap; min-width: 0; }
+
 </style>
 </head>
 <body class="admin">
@@ -527,6 +533,7 @@ var ICON = {
   back: ic('<path d="M15 5l-7 7 7 7"/>'),
   next: ic('<path d="M9 5l7 7-7 7"/>'),
   play: ic('<path d="M7 5v14l11-7z" fill="currentColor"/>'),
+  eye: ic('<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>'),
   full: ic('<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>')
 };
 var esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -693,7 +700,8 @@ var LEADERBOARD_EVERY = C.leaderboardEvery || 5;
 var AVATAR_COUNT = C.avatarCount || 30;
 
 // js/net.js
-var MODE = FIREBASE_CONFIG && FIREBASE_CONFIG.databaseURL ? "firebase" : "local";
+var PREVIEW = new URLSearchParams(location.search).get("preview") === "1";
+var MODE = PREVIEW ? "preview" : FIREBASE_CONFIG && FIREBASE_CONFIG.databaseURL ? "firebase" : "local";
 
 // js/admin.js
 decor();
@@ -753,6 +761,7 @@ function cardHTML(q) {
     <div class="qz-actions">
       <button class="btn primary sm" data-act="launch">${ICON.play} Lancer</button>
       <button class="btn sm" data-act="edit">Modifier</button>
+      <button class="icon-btn" data-act="preview" title="Aper\xE7u (sans joueurs)">${ICON.eye}</button>
       <span class="spacer"></span>
       <button class="icon-btn" data-act="dup" title="Dupliquer">${ICON.dup}</button>
       <button class="icon-btn" data-act="export" title="Exporter (.json)">${ICON.download}</button>
@@ -800,6 +809,10 @@ async function exportQ(id) {
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 2e3);
 }
+async function preview(id, q = 0) {
+  if (quiz?.id === id) await commit();
+  window.open(`host.html?quiz=${encodeURIComponent(id)}&preview=1&q=${q}`, "lutece-preview");
+}
 async function launch(id) {
   if (quiz?.id === id) await commit();
   const q = await getQuiz(id);
@@ -813,6 +826,7 @@ function renderEditor() {
     <a class="btn ghost sm" href="#">${ICON.back} Mes quiz</a>
     <input class="title-input" data-f="title" value="${esc(quiz.title)}" placeholder="Titre du quiz" aria-label="Titre du quiz" maxlength="80">
     <span class="save-state" id="ss">Enregistr\xE9</span>
+    <button class="btn ghost" data-act="preview" title="Tester le quiz sans joueurs">${ICON.eye} Aper\xE7u</button>
     <button class="btn primary" data-act="launch">${ICON.play} Lancer</button>`) + `
   <main class="wrap editor">
     ${quiz.questions.map(qHTML).join("")}
@@ -833,6 +847,7 @@ function qHTML(qq, i) {
       <label class="mini" title="Points">
         <select data-f="points">${POINTS.map(([v, l]) => `<option value="${v}" ${v === qq.points ? "selected" : ""}>${l}</option>`).join("")}</select></label>
       <span class="tools">
+        <button class="icon-btn" data-act="preview" title="Aper\xE7u \xE0 partir de cette question">${ICON.eye}</button>
         <button class="icon-btn" data-act="up" ${i === 0 ? "disabled" : ""} title="Monter">${ICON.up}</button>
         <button class="icon-btn" data-act="down" ${i === n - 1 ? "disabled" : ""} title="Descendre">${ICON.down}</button>
         <button class="icon-btn" data-act="dupq" title="Dupliquer">${ICON.dup}</button>
@@ -934,6 +949,8 @@ app.addEventListener("click", async (e) => {
       return;
     case "launch":
       return launch(card ? card.dataset.id : quiz.id);
+    case "preview":
+      return preview(card ? card.dataset.id : quiz.id, i >= 0 ? i : 0);
     case "dup":
       await duplicateQuiz(await getQuiz(card.dataset.id));
       toast("Quiz dupliqu\xE9");

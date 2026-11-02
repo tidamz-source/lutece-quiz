@@ -497,6 +497,12 @@ body.player[data-res] .decor { display: none; }
 .net-error b { font-size: 1.3rem; }
 .net-error small { opacity: .75; overflow-wrap: anywhere; }
 
+/* aperçu */
+.preview-pill { display: inline-flex; align-items: center; gap: .4em; background: var(--c-blue); color: #fff; font-weight: 600; font-size: .9rem; padding: .3em .8em; border-radius: 99px; }
+.qnav { display: inline-flex; align-items: center; gap: .3rem; margin-left: .4rem; }
+.qnav select { max-width: 260px; font-size: .9rem; }
+.bar-l { flex-wrap: wrap; min-width: 0; }
+
 </style>
 </head>
 <body class="player">
@@ -510,12 +516,13 @@ var LEADERBOARD_EVERY = C.leaderboardEvery || 5;
 var AVATAR_COUNT = C.avatarCount || 30;
 
 // js/net.js
-var MODE = FIREBASE_CONFIG && FIREBASE_CONFIG.databaseURL ? "firebase" : "local";
+var PREVIEW = new URLSearchParams(location.search).get("preview") === "1";
+var MODE = PREVIEW ? "preview" : FIREBASE_CONFIG && FIREBASE_CONFIG.databaseURL ? "firebase" : "local";
 var api = null;
 async function getDB() {
   if (!api) {
     try {
-      api = MODE === "firebase" ? await firebaseDB() : localDB();
+      api = MODE === "firebase" ? await firebaseDB() : localDB(MODE === "local");
     } catch (e) {
       document.body.insertAdjacentHTML("beforeend", `<div class="net-error"><b>Connexion impossible</b>
         <span>V\xE9rifie ta connexion internet et la config Firebase dans config.js.</span><small>${String(e?.message || e).replace(/</g, "&lt;")}</small></div>`);
@@ -539,12 +546,14 @@ async function firebaseDB() {
     now: () => F.serverTimestamp()
   };
 }
-function localDB() {
+function localDB(shared = true) {
   const KEY2 = "quizlive-local-db";
-  const ch = new BroadcastChannel("quizlive-local");
+  const ch = shared ? new BroadcastChannel("quizlive-local") : { postMessage() {
+  } };
   const listeners = /* @__PURE__ */ new Set();
   const parts = (p) => p.split("/").filter(Boolean);
   const read = () => {
+    if (!shared) return {};
     try {
       return JSON.parse(localStorage.getItem(KEY2)) || {};
     } catch {
@@ -589,7 +598,7 @@ function localDB() {
   const write = (ops) => {
     ops = ops.map(([p, v]) => [p, resolve(v)]);
     apply(ops);
-    localStorage.setItem(KEY2, JSON.stringify(mem));
+    if (shared) localStorage.setItem(KEY2, JSON.stringify(mem));
     ch.postMessage({ t: "ops", ops });
     notify();
   };
@@ -646,6 +655,7 @@ var ICON = {
   back: ic('<path d="M15 5l-7 7 7 7"/>'),
   next: ic('<path d="M9 5l7 7-7 7"/>'),
   play: ic('<path d="M7 5v14l11-7z" fill="currentColor"/>'),
+  eye: ic('<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>'),
   full: ic('<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>')
 };
 var esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
