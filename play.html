@@ -503,6 +503,10 @@ body.player[data-res] .decor { display: none; }
 .qnav select { max-width: 260px; font-size: .9rem; }
 .bar-l { flex-wrap: wrap; min-width: 0; }
 
+/* joueur : modifier le pseudo */
+.p-back { color: var(--ink); background: rgba(255, 255, 255, .08); margin: -.2rem 0; flex: none; }
+.link-btn { font: inherit; font-size: .9rem; font-weight: 600; color: var(--accent); background: none; border: 0; padding: 0; margin-top: .4rem; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+
 </style>
 </head>
 <body class="player">
@@ -695,6 +699,7 @@ var lastQ = -1;
 var myChoice = null;
 var recvAt = 0;
 var cd = null;
+var editing = false;
 var saved = (() => {
   try {
     return JSON.parse(store.getItem(KEY));
@@ -787,6 +792,42 @@ function updateLobby() {
   $$(".p-me .av, .p-head .av").forEach((img) => img.src = avatarSrc(me.avatar));
   $$(".av-grid button").forEach((b) => b.classList.toggle("on", +b.dataset.av === me.avatar));
 }
+function renderEditName(msg = "") {
+  delete document.body.dataset.res;
+  app.innerHTML = `<header class="p-head"><button class="icon-btn p-back" id="ecancel" aria-label="Retour">${ICON.back}</button><span class="p-name">Modifier mon pseudo</span></header>
+  <form class="join" id="ef" autocomplete="off">
+    ${avatar(me.avatar, "av-big")}
+    <input name="name" placeholder="Ton pseudo" maxlength="16" value="${esc(me.name)}" aria-label="Pseudo">
+    <button class="btn primary big" id="eb">Valider</button>
+    <p class="err" id="err">${esc(msg)}</p>
+  </form>`;
+  const input = $("[name=name]");
+  input.focus();
+  input.select();
+  $("#ecancel").onclick = () => {
+    editing = false;
+    render();
+  };
+  $("#ef").onsubmit = async (e) => {
+    e.preventDefault();
+    const n = input.value.trim();
+    const err = $("#err");
+    if (!n) return err.textContent = "Choisis un pseudo.";
+    if (n !== me.name) {
+      $("#eb").disabled = true;
+      const ps = await db.get(`rooms/${code}/players`) || {};
+      if (Object.entries(ps).some(([id, p]) => id !== pid && p.name.toLowerCase() === n.toLowerCase())) {
+        $("#eb").disabled = false;
+        return err.textContent = "Ce pseudo est d\xE9j\xE0 pris.";
+      }
+      me.name = n;
+      await db.update(`rooms/${code}/players/${pid}`, { name: n });
+      store.setItem(KEY, JSON.stringify({ code, pid, name: n }));
+    }
+    editing = false;
+    render();
+  };
+}
 var center = (inner) => `<div class="p-center">${inner}</div>`;
 function render() {
   if (!me) return;
@@ -797,17 +838,22 @@ function render() {
     recvAt = Date.now();
     myChoice = null;
   }
+  if (editing) {
+    if (ph === "lobby") return $("#ef") ? void 0 : renderEditName();
+    editing = false;
+  }
   if (ph === "lobby" && $(".av-grid")) return updateLobby();
   const last = me.last && state && me.last.q === state.q ? me.last : null;
   if (ph === "reveal" && last) document.body.dataset.res = last.ok ? "ok" : "ko";
   else delete document.body.dataset.res;
   document.body.dataset.phase = ph;
-  const head = `<header class="p-head">${avatar(me.avatar)}<span class="p-name">${esc(me.name)}</span>${state?.total && ["video", "question", "reveal"].includes(ph) ? `<span class="p-qn">${Math.min((state.q ?? 0) + 1, state.total)}/${state.total}</span>` : ""}</header>`;
+  const head = `<header class="p-head">${ph === "lobby" ? `<button class="icon-btn p-back" id="pback" aria-label="Modifier mon pseudo">${ICON.back}</button>` : ""}${avatar(me.avatar)}<span class="p-name">${esc(me.name)}</span>${state?.total && ["video", "question", "reveal"].includes(ph) ? `<span class="p-qn">${Math.min((state.q ?? 0) + 1, state.total)}/${state.total}</span>` : ""}</header>`;
   let body = "";
   switch (ph) {
     case "lobby":
       body = `<div class="p-lobby">
-        <div class="p-me">${avatar(me.avatar, "av-big")}<div><h1>Tu es dans la partie !</h1><p>Choisis ton avatar en attendant le d\xE9but.</p></div></div>
+        <div class="p-me">${avatar(me.avatar, "av-big")}<div><h1>Tu es dans la partie !</h1><p>Choisis ton avatar en attendant le d\xE9but.</p>
+          <button class="link-btn" id="pedit">Modifier mon pseudo</button></div></div>
         <div class="av-grid">${Array.from({ length: AVATAR_COUNT }, (_, i) => `<button data-av="${i}" class="${i === me.avatar ? "on" : ""}" aria-label="Avatar ${i + 1}">${avatar(i)}</button>`).join("")}</div>
       </div>`;
       break;
@@ -849,6 +895,10 @@ function render() {
   }
   app.innerHTML = head + body;
   if (ph === "lobby") {
+    $("#pback").onclick = $("#pedit").onclick = () => {
+      editing = true;
+      renderEditName();
+    };
     $(".av-grid").onclick = (e) => {
       const b = e.target.closest("[data-av]");
       if (b) pickAvatar(+b.dataset.av);
