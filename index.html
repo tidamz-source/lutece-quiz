@@ -874,7 +874,7 @@ function qHTML(qq, i) {
     <div class="seg media-seg">${MEDIA_TYPES.map(([t, l, ic2]) => `<button class="${mt === t ? "on" : ""}" data-act="mtype" data-type="${t}">${ic2}<span>${l}</span></button>`).join("")}</div>
     ${qq.media ? mediaHTML(qq.media, "media") : ""}
     ${mt === "video" ? `<div class="video-note">${ICON.video}<span>La vid\xE9o est lue en entier sur le grand \xE9cran, puis les r\xE9ponses s'affichent et le temps d\xE9marre.</span></div>
-    <div class="answer-media"><span class="am-label">Vid\xE9o r\xE9ponse <small class="muted">(optionnelle, propos\xE9e apr\xE8s la r\xE9v\xE9lation)</small></span>
+    <div class="answer-media"><span class="am-label">Vid\xE9o r\xE9ponse <small class="muted">(optionnelle, lue avant d'afficher les r\xE9sultats)</small></span>
       ${qq.answerMedia ? mediaHTML(qq.answerMedia, "answerMedia") : `<button class="btn sm ghost" data-act="addamedia">+ Ajouter une vid\xE9o r\xE9ponse</button>`}</div>` : ""}
     <div class="ans-head">
       <span class="muted">R\xE9ponses \xB7 coche la bonne</span>

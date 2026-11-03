@@ -3057,6 +3057,7 @@ async function main() {
   let primary = null;
   let pod = { seq: [], step: 0 };
   let botTimers = [];
+  let pendingCounts = [];
   const seen = /* @__PURE__ */ new Set();
   const editorURL = `index.html#/edit/${quiz.id}`;
   if (MODE === "local") await db.remove("rooms");
@@ -3102,6 +3103,8 @@ async function main() {
         return ["Lancer la partie", () => startQuestion(0), n === 0];
       case "video":
         return ["Passer la vid\xE9o", () => startAnswers(qi)];
+      case "answervideo":
+        return ["Voir les r\xE9sultats", reveal];
       case "question":
         return ["Terminer la question", closeQuestion];
       case "reveal":
@@ -3132,7 +3135,7 @@ async function main() {
       <div class="bar-r">
         <button class="icon-btn" id="fs" title="Plein \xE9cran (F)">${ICON.full}</button>
         <a class="btn ghost sm" href="${PREVIEW ? editorURL : "index.html"}" id="quit">${PREVIEW ? "Fermer l\u2019aper\xE7u" : "Quitter"}</a>
-        ${showAV ? `<button class="btn" id="av">${ICON.video} Vid\xE9o r\xE9ponse</button>` : ""}
+        ${showAV ? `<button class="btn ghost sm" id="av">${ICON.video} Revoir la vid\xE9o</button>` : ""}
         <button class="btn primary" id="go" ${disabled ? "disabled" : ""} title="Espace / Entr\xE9e">${label} ${ICON.next}</button>
       </div>`;
     $("#go").onclick = () => primary?.();
@@ -3365,9 +3368,40 @@ async function main() {
       upd[`players/${pid}/last`] = { q: qi, ok: r.ok, gained: r.gained, answered: r.answered, rank: k + 1, prevRank: r.prevRank };
     });
     if (order.length) await db.update(R, upd);
-    await db.set(`${R}/state`, { phase: "reveal", q: qi, total, text: q.text, choices: q.answers.map((a) => a.text), correct: q.correct });
+    pendingCounts = counts;
+    if (answerMedia[qi]) playAnswerVideo();
+    else reveal();
+  }
+  async function playAnswerVideo() {
+    const i = qi;
+    phase = "answervideo";
+    await db.set(`${R}/state`, { phase: "answervideo", q: i, total });
+    const qs = $("#qs");
+    qs.classList.add("show-av");
+    $("#qsm").innerHTML = `<video src="${esc(answerMedia[i])}" id="avid" playsinline></video>`;
+    setBar();
+    const v = $("#avid");
+    const done = () => {
+      if (phase === "answervideo" && qi === i) reveal();
+    };
+    v.onended = done;
+    v.onerror = done;
+    v.play().catch(() => {
+      $("#qsm").insertAdjacentHTML("beforeend", `<button class="play-overlay" id="po">${ICON.play}</button>`);
+      $("#po").onclick = () => {
+        $("#po").remove();
+        v.play();
+      };
+    });
+  }
+  async function reveal() {
+    if (!["question", "answervideo"].includes(phase)) return;
+    $("#avid")?.pause();
+    const q = quiz.questions[qi];
     phase = "reveal";
-    renderReveal(q, counts);
+    await db.set(`${R}/state`, { phase: "reveal", q: qi, total, text: q.text, choices: q.answers.map((a) => a.text), correct: q.correct });
+    $("#qs").classList.remove("show-av");
+    renderReveal(q, pendingCounts);
     setBar();
   }
   function renderReveal(q, counts) {

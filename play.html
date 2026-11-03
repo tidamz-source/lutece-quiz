@@ -858,7 +858,7 @@ function render() {
   if (ph === "reveal" && last) document.body.dataset.res = last.ok ? "ok" : "ko";
   else delete document.body.dataset.res;
   document.body.dataset.phase = ph;
-  const head = `<header class="p-head">${ph === "lobby" ? `<button class="icon-btn p-back" id="pback" aria-label="Modifier mon pseudo">${ICON.back}</button>` : ""}${avatar(me.avatar)}<span class="p-name">${esc(me.name)}</span>${state?.total && ["video", "question", "reveal"].includes(ph) ? `<span class="p-qn">${Math.min((state.q ?? 0) + 1, state.total)}/${state.total}</span>` : ""}</header>`;
+  const head = `<header class="p-head">${ph === "lobby" ? `<button class="icon-btn p-back" id="pback" aria-label="Modifier mon pseudo">${ICON.back}</button>` : ""}${avatar(me.avatar)}<span class="p-name">${esc(me.name)}</span>${state?.total && ["video", "question", "answervideo", "reveal"].includes(ph) ? `<span class="p-qn">${Math.min((state.q ?? 0) + 1, state.total)}/${state.total}</span>` : ""}</header>`;
   let body = "";
   switch (ph) {
     case "lobby":
@@ -877,6 +877,9 @@ function render() {
             <p class="p-qtext">${esc(state.text)}</p>
             <div class="p-btns n${state.choices.length}">${state.choices.map((c, j) => `<button data-j="${j}" style="--c:${COLORS[j]}">${shape(j)}<span>${esc(c)}</span></button>`).join("")}</div>
           </div>`;
+      break;
+    case "answervideo":
+      body = center(`${star("point", "p-star")}<h1>Regarde l'\xE9cran !</h1><p>La r\xE9ponse arrive en vid\xE9o\u2026</p>`);
       break;
     case "reveal":
       if (!last) body = center(`${star("scheme", "p-star")}<h1>R\xE9sultats\u2026</h1>`);
