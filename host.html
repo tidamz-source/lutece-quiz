@@ -120,7 +120,8 @@ select { width: auto; padding: .4em .6em; cursor: pointer; }
 .qz-band i { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; color: #fff; }
 .qz-band .shape { width: 15px; height: 15px; }
 .qz h3 { font-size: 1.3rem; overflow-wrap: anywhere; }
-.qz-actions { display: flex; align-items: center; gap: .4rem; margin-top: auto; padding-top: .5rem; }
+.qz-actions { display: flex; align-items: center; flex-wrap: wrap; gap: .4rem; margin-top: auto; padding-top: .5rem; }
+.qz-tools { display: flex; gap: .1rem; margin-left: auto; }
 .tag { align-self: flex-start; font-size: .78rem; font-weight: 600; padding: .25em .7em; border-radius: 99px; }
 .tag.ok { background: rgba(46, 142, 67, .25); color: #7fdc95; }
 .tag.warn { background: rgba(255, 207, 0, .15); color: var(--accent); }
@@ -264,6 +265,7 @@ body.host { height: 100vh; height: 100dvh; overflow: hidden; display: grid; grid
 .pill { background: var(--panel-3); padding: .35em .9em; border-radius: 99px; font-weight: 600; font-size: clamp(.9rem, 1.1vw, 1.15rem); }
 .pill.gold { background: var(--accent); color: var(--accent-ink); }
 .qs-text {
+  position: relative;
   background: #fff; color: var(--bg); text-align: center; padding: .55em 1em; border-radius: 22px;
   font-size: clamp(1.5rem, 3.2vw, 3.4rem); box-shadow: var(--drop); animation: drop-in .4s cubic-bezier(.3, 1.4, .5, 1);
 }
@@ -501,6 +503,20 @@ body.player[data-res] .decor { display: none; }
 .qnav { display: inline-flex; align-items: center; gap: .3rem; margin-left: .4rem; }
 .qnav select { max-width: 260px; font-size: .9rem; }
 .bar-l { flex-wrap: wrap; min-width: 0; }
+
+/* joueur : modifier le pseudo */
+.p-back { color: var(--ink); background: rgba(255, 255, 255, .08); margin: -.2rem 0; flex: none; }
+.link-btn { font: inherit; font-size: .9rem; font-weight: 600; color: var(--accent); background: none; border: 0; padding: 0; margin-top: .4rem; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+
+/* pastille points doubles */
+.x2 {
+  position: absolute; top: -.55em; right: -.35em; transform: rotate(12deg);
+  display: grid; place-items: center; width: 2.4em; height: 2.4em; border-radius: 50%;
+  background: var(--accent); color: var(--accent-ink); font-size: .55em; font-weight: 700; line-height: 1;
+  box-shadow: var(--drop); border: 4px solid var(--bg); animation: x2-pop .5s .3s cubic-bezier(.3, 1.6, .5, 1) backwards;
+}
+@keyframes x2-pop { from { transform: rotate(12deg) scale(0); } }
+.x2.sm { position: static; display: inline-grid; width: auto; height: auto; padding: .1em .5em; border-radius: 99px; border: 0; font-size: .85rem; box-shadow: none; transform: none; animation: none; margin-left: .3em; }
 
 </style>
   <script>
@@ -2812,7 +2828,6 @@ var qrcode = function() {
 // js/config.js
 var C = window.LUTECE_CONFIG || {};
 var FIREBASE_CONFIG = C.firebase || {};
-var LEADERBOARD_EVERY = C.leaderboardEvery || 5;
 var AVATAR_COUNT = C.avatarCount || 30;
 
 // js/net.js
@@ -3079,7 +3094,7 @@ async function main() {
   const nPlayers = () => Object.keys(players).length;
   const ranked = () => Object.entries(players).sort((a, b) => (b[1].score || 0) - (a[1].score || 0));
   const isLast = () => qi + 1 >= total;
-  const leaderboardDue = () => (qi + 1) % LEADERBOARD_EVERY === 0;
+  const leaderboardDue = () => total >= 4 && qi + 1 === Math.ceil(total / 2);
   function action() {
     const n = nPlayers();
     switch (phase) {
@@ -3296,11 +3311,12 @@ async function main() {
     return `<div class="audio-viz"><div class="eq"><i></i><i></i><i></i><i></i><i></i></div><audio src="${esc(url)}" id="ma"></audio></div>`;
   }
   function renderQuestion(q, mode) {
-    const badge = q.points === 2 ? '<span class="pill gold">Points doubles</span>' : q.points === 0 ? '<span class="pill">Sans points</span>' : "";
+    const badge = q.points === 0 ? '<span class="pill">Sans points</span>' : "";
+    const x2 = q.points === 2 ? '<span class="x2" title="Points doubles">\xD72</span>' : "";
     const answersMode = mode === "answers";
     stage.innerHTML = `<div class="qs ${answersMode ? "" : "video-mode"}" id="qs">
       <div class="qs-top"><span class="pill">Question ${qi + 1} / ${total}</span>${badge}${answersMode ? "" : '<span class="pill">Regardez bien\u2026</span>'}</div>
-      <h1 class="qs-text">${esc(q.text)}</h1>
+      <h1 class="qs-text">${esc(q.text)}${x2}</h1>
       <div class="qs-mid">
         ${answersMode ? `<div class="timer" id="timer"><svg viewBox="0 0 100 100"><circle cx="50" cy="50" r="44" class="track"/><circle cx="50" cy="50" r="44" class="prog" id="tprog"/></svg><span id="tnum">${q.time}</span></div>` : ""}
         <div class="qs-media" id="qsm">${mediaBlock(q, mode)}</div>
