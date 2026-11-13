@@ -518,6 +518,17 @@ body.player[data-res] .decor { display: none; }
 @keyframes x2-pop { from { transform: rotate(12deg) scale(0); } }
 .x2.sm { position: static; display: inline-grid; width: auto; height: auto; padding: .1em .5em; border-radius: 99px; border: 0; font-size: .85rem; box-shadow: none; transform: none; animation: none; margin-left: .3em; }
 
+/* enchaînement automatique */
+.auto-toggle { font: inherit; font-size: .85rem; font-weight: 600; display: inline-flex; align-items: center; gap: .45em; border: 0; background: transparent; color: var(--muted); cursor: pointer; padding: .3em .5em; border-radius: 10px; }
+.auto-toggle:hover { background: var(--panel-3); color: var(--ink); }
+.auto-toggle i { position: relative; width: 30px; height: 18px; border-radius: 99px; background: var(--panel-3); transition: background .15s; }
+.auto-toggle i::after { content: ''; position: absolute; top: 3px; left: 3px; width: 12px; height: 12px; border-radius: 50%; background: #fff; transition: transform .15s; }
+.auto-toggle.on { color: var(--ink); }
+.auto-toggle.on i { background: var(--c-green); }
+.auto-toggle.on i::after { transform: translateX(12px); }
+#go.counting { background-image: linear-gradient(90deg, rgba(0, 0, 0, .14) calc(var(--p, 0) * 100%), transparent 0); }
+.auto-cd { display: inline-grid; place-items: center; min-width: 1.6em; height: 1.6em; border-radius: 50%; background: var(--accent-ink); color: var(--accent); font-size: .85em; }
+
 </style>
   <script>
 //---------------------------------------------------------------------
@@ -3058,6 +3069,42 @@ async function main() {
   let pod = { seq: [], step: 0 };
   let botTimers = [];
   let pendingCounts = [];
+  const AUTO_DELAY = 6e3;
+  let autoNext = (() => {
+    try {
+      return localStorage.getItem("lutece-auto") !== "0";
+    } catch {
+      return true;
+    }
+  })();
+  let autoTimer = null;
+  let autoEnd = 0;
+  let closedByAll = false;
+  function startAuto() {
+    cancelAuto();
+    autoEnd = Date.now() + AUTO_DELAY;
+    autoTimer = setInterval(() => {
+      const left = autoEnd - Date.now();
+      const go = $("#go");
+      if (go) go.style.setProperty("--p", Math.max(0, 1 - left / AUTO_DELAY));
+      const cd = $("#acd");
+      if (cd) cd.textContent = Math.max(0, Math.ceil(left / 1e3));
+      if (left <= 0) {
+        cancelAuto();
+        primary?.();
+      }
+    }, 100);
+    setBar();
+  }
+  function cancelAuto() {
+    if (!autoTimer) return;
+    clearInterval(autoTimer);
+    autoTimer = null;
+  }
+  const next = () => {
+    cancelAuto();
+    primary?.();
+  };
   const seen = /* @__PURE__ */ new Set();
   const editorURL = `index.html#/edit/${quiz.id}`;
   if (MODE === "local") await db.remove("rooms");
@@ -3085,6 +3132,7 @@ async function main() {
   }
   function jumpTo(i) {
     if (i < 0 || i >= total) return;
+    cancelAuto();
     clearInterval(tick);
     clearBots();
     unsubAns?.();
@@ -3136,9 +3184,24 @@ async function main() {
         <button class="icon-btn" id="fs" title="Plein \xE9cran (F)">${ICON.full}</button>
         <a class="btn ghost sm" href="${PREVIEW ? editorURL : "index.html"}" id="quit">${PREVIEW ? "Fermer l\u2019aper\xE7u" : "Quitter"}</a>
         ${showAV ? `<button class="btn ghost sm" id="av">${ICON.video} Revoir la vid\xE9o</button>` : ""}
-        <button class="btn primary" id="go" ${disabled ? "disabled" : ""} title="Espace / Entr\xE9e">${label} ${ICON.next}</button>
+        ${["lobby", "end"].includes(phase) ? "" : `<button class="auto-toggle ${autoNext ? "on" : ""}" id="autot" title="Si tout le monde a r\xE9pondu, passer seul \xE0 la suite apr\xE8s ${AUTO_DELAY / 1e3} s"><i></i>Auto</button>`}
+        ${autoTimer ? `<button class="btn ghost sm" id="acancel" title="Arr\xEAter l'encha\xEEnement automatique">Pause</button>` : ""}
+        <button class="btn primary ${autoTimer ? "counting" : ""}" id="go" ${disabled ? "disabled" : ""} title="Espace / Entr\xE9e">${label}${autoTimer ? ` <span class="auto-cd" id="acd">${Math.max(0, Math.ceil((autoEnd - Date.now()) / 1e3))}</span>` : ` ${ICON.next}`}</button>
       </div>`;
-    $("#go").onclick = () => primary?.();
+    $("#go").onclick = next;
+    $("#acancel")?.addEventListener("click", () => {
+      cancelAuto();
+      setBar();
+    });
+    $("#autot")?.addEventListener("click", () => {
+      autoNext = !autoNext;
+      try {
+        localStorage.setItem("lutece-auto", autoNext ? "1" : "0");
+      } catch {
+      }
+      if (!autoNext) cancelAuto();
+      setBar();
+    });
     $("#fs").onclick = toggleFS;
     $("#av")?.addEventListener("click", showAnswerVideo);
     if (PREVIEW) {
@@ -3146,6 +3209,7 @@ async function main() {
       $("#qnext").onclick = () => jumpTo(qi + 1);
       $("#qjump").onchange = (e) => jumpTo(+e.target.value);
       $("#qend").onclick = () => {
+        cancelAuto();
         clearInterval(tick);
         clearBots();
         unsubAns?.();
@@ -3179,7 +3243,7 @@ async function main() {
     }
     if (e.code === "Space" || e.key === "Enter" || e.key === "ArrowRight") {
       e.preventDefault();
-      primary?.();
+      next();
     }
     if (e.key === "f" || e.key === "F") toggleFS();
   });
@@ -3340,6 +3404,7 @@ async function main() {
   async function closeQuestion() {
     if (phase !== "question" || closing) return;
     closing = true;
+    closedByAll = nPlayers() > 0 && validCount() >= nPlayers();
     clearInterval(tick);
     clearBots();
     unsubAns?.();
@@ -3403,6 +3468,7 @@ async function main() {
     $("#qs").classList.remove("show-av");
     renderReveal(q, pendingCounts);
     setBar();
+    if (autoNext && closedByAll) startAuto();
   }
   function renderReveal(q, counts) {
     const qs = $("#qs");
