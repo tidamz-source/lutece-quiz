@@ -519,6 +519,29 @@ body.player[data-res] .decor { display: none; }
 @keyframes x2-pop { from { transform: rotate(12deg) scale(0); } }
 .x2.sm { position: static; display: inline-grid; width: auto; height: auto; padding: .1em .5em; border-radius: 99px; border: 0; font-size: .85rem; box-shadow: none; transform: none; animation: none; margin-left: .3em; }
 
+/* enchaînement automatique */
+.auto-toggle { font: inherit; font-size: .85rem; font-weight: 600; display: inline-flex; align-items: center; gap: .45em; border: 0; background: transparent; color: var(--muted); cursor: pointer; padding: .3em .5em; border-radius: 10px; }
+.auto-toggle:hover { background: var(--panel-3); color: var(--ink); }
+.auto-toggle i { position: relative; width: 30px; height: 18px; border-radius: 99px; background: var(--panel-3); transition: background .15s; }
+.auto-toggle i::after { content: ''; position: absolute; top: 3px; left: 3px; width: 12px; height: 12px; border-radius: 50%; background: #fff; transition: transform .15s; }
+.auto-toggle.on { color: var(--ink); }
+.auto-toggle.on i { background: var(--c-green); }
+.auto-toggle.on i::after { transform: translateX(12px); }
+#go.counting { background-image: linear-gradient(90deg, rgba(0, 0, 0, .14) calc(var(--p, 0) * 100%), transparent 0); }
+.auto-cd { display: inline-grid; place-items: center; min-width: 1.6em; height: 1.6em; border-radius: 50%; background: var(--accent-ink); color: var(--accent); font-size: .85em; }
+
+/* prêts à reprendre (classement provisoire) */
+.ready-box { display: grid; justify-items: center; gap: .5rem; width: min(560px, 100%); background: var(--panel); border-radius: 18px; padding: .9rem 1.2rem; box-shadow: var(--drop); }
+.ready-count { font-size: clamp(1.1rem, 1.6vw, 1.6rem); font-weight: 600; }
+.ready-count b { color: var(--accent); font-size: 1.4em; }
+.ready-track { width: 100%; height: 12px; border-radius: 99px; background: var(--panel-3); overflow: hidden; }
+.ready-track i { display: block; height: 100%; background: var(--c-green); border-radius: 99px; transition: width .4s cubic-bezier(.3, 1.3, .5, 1); }
+.ready-wait { color: var(--muted); font-size: clamp(.9rem, 1.1vw, 1.1rem); text-align: center; }
+.ready-box.all { background: var(--c-green); animation: bounce-in .45s cubic-bezier(.3, 1.6, .5, 1); }
+.ready-box.all b { font-size: clamp(1.3rem, 2vw, 2rem); }
+.ready-btn { margin-top: .6rem; max-width: 320px; }
+.lb { gap: 1.1rem; }
+
 </style>
 </head>
 <body class="player">
@@ -888,7 +911,8 @@ function render() {
         <p>La bonne r\xE9ponse : <b>${esc(state.choices[state.correct])}</b></p>`);
       break;
     case "leaderboard":
-      body = center(`${star("point", "p-star")}<h1>Classement provisoire</h1><p>Regarde le grand \xE9cran :<br>es-tu dans le top 10 ?</p>`);
+      body = me.ready === state.q ? center(`<div class="res ok">${ICON.check}</div><h1>C'est not\xE9 !</h1><p>On attend les autres\u2026</p><div class="dots"><i></i><i></i><i></i></div>`) : center(`${star("point", "p-star")}<h1>Classement provisoire</h1><p>Regarde le grand \xE9cran :<br>es-tu dans le top 10 ?</p>
+            <button class="btn primary big ready-btn" id="rdy">Je suis pr\xEAt !</button>`);
       break;
     case "end": {
       if (!state.final) {
@@ -916,6 +940,14 @@ function render() {
     $(".av-grid").onclick = (e) => {
       const b = e.target.closest("[data-av]");
       if (b) pickAvatar(+b.dataset.av);
+    };
+  }
+  if (ph === "leaderboard" && $("#rdy")) {
+    $("#rdy").onclick = () => {
+      navigator.vibrate?.(40);
+      me.ready = state.q;
+      db.update(`rooms/${code}/players/${pid}`, { ready: state.q });
+      render();
     };
   }
   if (ph === "question" && myChoice === null) {

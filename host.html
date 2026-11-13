@@ -529,6 +529,18 @@ body.player[data-res] .decor { display: none; }
 #go.counting { background-image: linear-gradient(90deg, rgba(0, 0, 0, .14) calc(var(--p, 0) * 100%), transparent 0); }
 .auto-cd { display: inline-grid; place-items: center; min-width: 1.6em; height: 1.6em; border-radius: 50%; background: var(--accent-ink); color: var(--accent); font-size: .85em; }
 
+/* prêts à reprendre (classement provisoire) */
+.ready-box { display: grid; justify-items: center; gap: .5rem; width: min(560px, 100%); background: var(--panel); border-radius: 18px; padding: .9rem 1.2rem; box-shadow: var(--drop); }
+.ready-count { font-size: clamp(1.1rem, 1.6vw, 1.6rem); font-weight: 600; }
+.ready-count b { color: var(--accent); font-size: 1.4em; }
+.ready-track { width: 100%; height: 12px; border-radius: 99px; background: var(--panel-3); overflow: hidden; }
+.ready-track i { display: block; height: 100%; background: var(--c-green); border-radius: 99px; transition: width .4s cubic-bezier(.3, 1.3, .5, 1); }
+.ready-wait { color: var(--muted); font-size: clamp(.9rem, 1.1vw, 1.1rem); text-align: center; }
+.ready-box.all { background: var(--c-green); animation: bounce-in .45s cubic-bezier(.3, 1.6, .5, 1); }
+.ready-box.all b { font-size: clamp(1.3rem, 2vw, 2rem); }
+.ready-btn { margin-top: .6rem; max-width: 320px; }
+.lb { gap: 1.1rem; }
+
 </style>
   <script>
 //---------------------------------------------------------------------
@@ -3070,6 +3082,8 @@ async function main() {
   let botTimers = [];
   let pendingCounts = [];
   const AUTO_DELAY = 6e3;
+  const POD_FIRST = 3e3;
+  const POD_DELAY = 4500;
   let autoNext = (() => {
     try {
       return localStorage.getItem("lutece-auto") !== "0";
@@ -3080,13 +3094,15 @@ async function main() {
   let autoTimer = null;
   let autoEnd = 0;
   let closedByAll = false;
-  function startAuto() {
+  let autoDur = AUTO_DELAY;
+  function startAuto(ms = AUTO_DELAY) {
     cancelAuto();
-    autoEnd = Date.now() + AUTO_DELAY;
+    autoDur = ms;
+    autoEnd = Date.now() + ms;
     autoTimer = setInterval(() => {
       const left = autoEnd - Date.now();
       const go = $("#go");
-      if (go) go.style.setProperty("--p", Math.max(0, 1 - left / AUTO_DELAY));
+      if (go) go.style.setProperty("--p", Math.max(0, 1 - left / autoDur));
       const cd = $("#acd");
       if (cd) cd.textContent = Math.max(0, Math.ceil(left / 1e3));
       if (left <= 0) {
@@ -3113,6 +3129,7 @@ async function main() {
     players = v || {};
     if (phase === "lobby") renderChips();
     if (phase === "question") checkAllAnswered();
+    if (phase === "leaderboard") updateReady();
     setBar();
   });
   const BOTS = ["Camille", "Hugo", "In\xE8s", "Lucas", "Manon", "Noah", "Jade", "Louis"];
@@ -3184,7 +3201,7 @@ async function main() {
         <button class="icon-btn" id="fs" title="Plein \xE9cran (F)">${ICON.full}</button>
         <a class="btn ghost sm" href="${PREVIEW ? editorURL : "index.html"}" id="quit">${PREVIEW ? "Fermer l\u2019aper\xE7u" : "Quitter"}</a>
         ${showAV ? `<button class="btn ghost sm" id="av">${ICON.video} Revoir la vid\xE9o</button>` : ""}
-        ${["lobby", "end"].includes(phase) ? "" : `<button class="auto-toggle ${autoNext ? "on" : ""}" id="autot" title="Si tout le monde a r\xE9pondu, passer seul \xE0 la suite apr\xE8s ${AUTO_DELAY / 1e3} s"><i></i>Auto</button>`}
+        ${phase === "lobby" ? "" : `<button class="auto-toggle ${autoNext ? "on" : ""}" id="autot" title="Si tout le monde a r\xE9pondu, passer seul \xE0 la suite apr\xE8s ${AUTO_DELAY / 1e3} s"><i></i>Auto</button>`}
         ${autoTimer ? `<button class="btn ghost sm" id="acancel" title="Arr\xEAter l'encha\xEEnement automatique">Pause</button>` : ""}
         <button class="btn primary ${autoTimer ? "counting" : ""}" id="go" ${disabled ? "disabled" : ""} title="Espace / Entr\xE9e">${label}${autoTimer ? ` <span class="auto-cd" id="acd">${Math.max(0, Math.ceil((autoEnd - Date.now()) / 1e3))}</span>` : ` ${ICON.next}`}</button>
       </div>`;
@@ -3200,6 +3217,7 @@ async function main() {
       } catch {
       }
       if (!autoNext) cancelAuto();
+      else if (phase === "end" && pod.step < pod.seq.length && !autoTimer) return startAuto(POD_DELAY);
       setBar();
     });
     $("#fs").onclick = toggleFS;
@@ -3503,6 +3521,7 @@ async function main() {
   function showLeaderboard() {
     $("#avid")?.pause();
     phase = "leaderboard";
+    readyGo = false;
     db.set(`${R}/state`, { phase: "leaderboard", q: qi, total });
     const list = ranked().slice(0, 10);
     stage.innerHTML = `<div class="lb">
@@ -3516,8 +3535,37 @@ async function main() {
           <span class="lb-score">${p.score || 0}</span>
         </li>`;
     }).join("")}</ol>` : `<p class="muted">Personne n'a jou\xE9\u2026</p>`}
+      <div class="ready-box" id="ready"></div>
     </div>`;
+    updateReady();
     setBar();
+    if (PREVIEW) {
+      const at = qi;
+      Object.keys(players).forEach((pid) => botTimers.push(setTimeout(() => {
+        if (phase === "leaderboard" && qi === at) db.update(`${R}/players/${pid}`, { ready: at });
+      }, 1200 + Math.random() * 4e3)));
+    }
+  }
+  let readyGo = false;
+  function updateReady() {
+    const box = $("#ready");
+    if (!box) return;
+    const list = Object.values(players);
+    const n = list.length;
+    const ready = list.filter((p) => p.ready === qi);
+    const waiting = list.filter((p) => p.ready !== qi);
+    const all = n > 0 && ready.length >= n;
+    box.classList.toggle("all", all);
+    box.innerHTML = all ? `<b>Tout le monde est pr\xEAt !</b><span>C'est reparti\u2026</span>` : `<div class="ready-count"><b>${ready.length}</b> / ${n} pr\xEAt${ready.length > 1 ? "s" : ""}</div>
+         <div class="ready-track"><i style="width:${n ? ready.length / n * 100 : 0}%"></i></div>
+         <div class="ready-wait">${waiting.length <= 6 && ready.length ? `On attend : ${waiting.map((p) => esc(p.name)).join(", ")}` : "Appuyez sur \xAB Je suis pr\xEAt \xBB sur votre t\xE9l\xE9phone"}</div>`;
+    if (all && !readyGo) {
+      readyGo = true;
+      const at = qi;
+      setTimeout(() => {
+        if (phase === "leaderboard" && qi === at) next();
+      }, 1500);
+    }
   }
   function showResults() {
     $("#avid")?.pause();
@@ -3526,6 +3574,7 @@ async function main() {
     const top = list.slice(0, 3);
     pod = { seq: [2, 1, 0].filter((k) => top[k]), step: 0 };
     db.set(`${R}/state`, { phase: "end", total, final: pod.seq.length === 0 });
+    clearBots();
     stage.innerHTML = `<div class="end">
       <div class="end-head">${star("scheme", "end-star")}<h1 class="big-title">Podium</h1></div>
       <div class="podium">${[1, 0, 2].map((k) => !top[k] ? "" : `
@@ -3539,6 +3588,7 @@ async function main() {
     </div>
     <div class="confetti" id="confetti"></div>`;
     setBar();
+    if (autoNext && pod.seq.length) startAuto(POD_FIRST);
   }
   function revealPodium() {
     const k = pod.seq[pod.step++];
@@ -3556,6 +3606,7 @@ async function main() {
       db.update(`${R}/state`, { final: true });
     }
     setBar();
+    if (!done && autoNext) startAuto(POD_DELAY);
   }
   function burst(anchor) {
     const box = $("#confetti");
