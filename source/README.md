@@ -53,15 +53,38 @@ Le plan gratuit (Spark) accepte 100 connexions simultanées : large pour 30 joue
 ## Déroulé d'une partie
 
 - **Lobby** : les joueurs scannent le QR, choisissent un pseudo puis un avatar (modifiable jusqu'au lancement).
-- **Question vidéo** : la vidéo est lue en entier sur le grand écran, puis les réponses s'affichent et le temps démarre. Après la révélation, bouton **Vidéo réponse** si tu en as ajouté une.
-- **Scores secrets** : les téléphones indiquent seulement bonne ou mauvaise réponse. Le rang et les points n'apparaissent qu'à la toute fin.
-- **Classement provisoire** (top 10) toutes les 5 questions : réglable via `leaderboardEvery` dans `config.js`.
+- **Question vidéo** : la vidéo est lue en entier sur le grand écran, puis les réponses s'affichent et le temps démarre. À la fin du temps, la vidéo réponse (si tu en as ajouté une) est lue en entier, puis les résultats s'affichent. Bouton **Voir les résultats** pour la passer, **Revoir la vidéo** ensuite.
+- **Scores secrets** : les téléphones indiquent seulement bonne ou mauvaise réponse ; rang et points à la toute fin.
+- **Points doubles** : pastille ×2 sur la question (grand écran et téléphone).
+- **Classement provisoire** (top 10) une seule fois, à mi-parcours (après la 20e question sur 40).
 - **Résultats** : podium révélé étape par étape (3e, 2e, puis le 1er avec explosion de confettis).
 
 ## Avatars et mascotte
 
 - `avatars/avatar-01.png` … `avatar-30.png` : placeholders numérotés. Remplace-les par tes images en gardant les mêmes noms (carrées, 256×256 conseillé). Pour un autre nombre, change `avatarCount` dans `config.js`.
 - `img/star-*.png` : la mascotte (point, happy, run, scheme).
+
+## Aperçu (tester sans joueurs)
+
+Bouton **Aperçu** (icône œil) sur la carte du quiz, dans la barre de l'éditeur, ou sur chaque question pour démarrer à partir de celle-ci.
+L'écran de jeu s'ouvre dans un onglet à part, sans QR ni lobby, avec 8 faux joueurs qui répondent tout seuls (graphes, classement et podium remplis).
+Rien n'est envoyé en ligne. Navigation : flèches ◀ ▶ (ou ← →), liste déroulante des questions, bouton **Podium**.
+Après une modification dans l'éditeur, clique à nouveau sur Aperçu pour recharger.
+
+## Enchaînement automatique
+
+Interrupteur **Auto** dans la barre du bas (activé par défaut, mémorisé sur l'ordinateur).
+Quand **tous les joueurs ont répondu**, la question se ferme, les résultats restent affichés 6 secondes (compte à rebours sur le bouton), puis le jeu passe seul à la suite : question suivante, classement à mi-parcours ou résultats.
+Si quelqu'un n'a pas répondu (temps écoulé), on reste en manuel.
+- **Classement provisoire** : chaque joueur a un bouton **« Je suis prêt ! »** sur son téléphone ; le grand écran affiche « 3 / 5 prêts » et qui on attend. Quand tout le monde est prêt, la partie reprend toute seule (Espace force la reprise si un joueur a quitté).
+- **Podium** : révélé tout seul avec un minuteur (3e après 3 s, puis 2e et 1er toutes les 4,5 s). Espace accélère, Pause arrête, l'interrupteur Auto désactive.
+**Pause** stoppe le compte à rebours ; Espace passe tout de suite.
+
+## Télécommande (piloter depuis son téléphone)
+
+Dans le lobby du grand écran, clique sur un pseudo → **Donner la télécommande**. Une icône de télécommande apparaît à côté de son nom.
+Sur son téléphone, une barre **Suivant** s'affiche en bas : elle fait exactement comme Espace (lancer, passer la vidéo, terminer la question, question suivante, classement, podium) et indique l'action à venir.
+Un seul joueur à la fois ; reclique sur son pseudo → **Reprendre la télécommande** pour la lui retirer. Le clavier de l'ordinateur continue de marcher.
 
 ## Pilotage le jour J
 

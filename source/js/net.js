@@ -2,13 +2,15 @@
 // API : set(path, v) · update(path, obj) · remove(path) · get(path) · on(path, cb) → unsubscribe · now()
 import { FIREBASE_CONFIG } from './config.js';
 
-export const MODE = FIREBASE_CONFIG && FIREBASE_CONFIG.databaseURL ? 'firebase' : 'local';
+// Aperçu (host.html?preview=1) : base en mémoire, isolée, jamais envoyée en ligne
+export const PREVIEW = new URLSearchParams(location.search).get('preview') === '1';
+export const MODE = PREVIEW ? 'preview' : FIREBASE_CONFIG && FIREBASE_CONFIG.databaseURL ? 'firebase' : 'local';
 
 let api = null;
 export async function getDB() {
   if (!api) {
     try {
-      api = MODE === 'firebase' ? await firebaseDB() : localDB();
+      api = MODE === 'firebase' ? await firebaseDB() : localDB(MODE === 'local');
     } catch (e) {
       document.body.insertAdjacentHTML('beforeend', `<div class="net-error"><b>Connexion impossible</b>
         <span>Vérifie ta connexion internet et la config Firebase dans config.js.</span><small>${String(e?.message || e).replace(/</g, '&lt;')}</small></div>`);
@@ -35,12 +37,12 @@ async function firebaseDB() {
 }
 
 // Mode démo : base JSON dans localStorage, synchronisée entre onglets via BroadcastChannel.
-function localDB() {
+function localDB(shared = true) {
   const KEY = 'quizlive-local-db';
-  const ch = new BroadcastChannel('quizlive-local');
+  const ch = shared ? new BroadcastChannel('quizlive-local') : { postMessage() {} };
   const listeners = new Set();
   const parts = (p) => p.split('/').filter(Boolean);
-  const read = () => { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch { return {}; } };
+  const read = () => { if (!shared) return {}; try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch { return {}; } };
   const getAt = (o, p) => parts(p).reduce((a, k) => (a == null ? undefined : a[k]), o);
   const resolve = (v) => {
     if (v && typeof v === 'object') {
@@ -76,7 +78,7 @@ function localDB() {
   const write = (ops) => {
     ops = ops.map(([p, v]) => [p, resolve(v)]);
     apply(ops);
-    localStorage.setItem(KEY, JSON.stringify(mem));
+    if (shared) localStorage.setItem(KEY, JSON.stringify(mem));
     ch.postMessage({ t: 'ops', ops });
     notify();
   };

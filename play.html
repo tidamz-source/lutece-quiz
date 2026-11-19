@@ -542,6 +542,23 @@ body.player[data-res] .decor { display: none; }
 .ready-btn { margin-top: .6rem; max-width: 320px; }
 .lb { gap: 1.1rem; }
 
+/* télécommande : menu joueur (grand écran) */
+.chip-p.has-remote { box-shadow: 0 0 0 3px var(--accent), var(--drop); }
+.remote-badge { display: inline-grid; place-items: center; width: 1.5em; height: 1.5em; border-radius: 50%; background: var(--accent); color: var(--accent-ink); }
+.remote-badge .ic { width: .9em; height: .9em; }
+.pmenu { position: fixed; z-index: 60; display: grid; gap: .35rem; min-width: 250px; padding: .7rem; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 16px 40px rgba(0, 0, 0, .5); animation: drop-in .2s; }
+.pmenu b { padding: .2rem .4rem .4rem; font-size: 1.05rem; }
+.pmenu button { font: inherit; font-weight: 600; display: flex; align-items: center; gap: .6rem; text-align: left; border: 0; border-radius: 10px; padding: .65rem .8rem; background: var(--panel-2); color: var(--ink); cursor: pointer; }
+.pmenu button:hover { background: var(--panel-3); }
+.pmenu button.danger { color: #ff8a9a; }
+/* télécommande : barre sur le téléphone */
+.remote-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; display: flex; align-items: center; gap: .7rem; padding: .7rem .9rem calc(.7rem + env(safe-area-inset-bottom)); background: var(--panel); border-top: 2px solid var(--accent); }
+.remote-ic { display: grid; place-items: center; width: 44px; height: 44px; flex: none; border-radius: 12px; background: var(--accent); color: var(--accent-ink); }
+.remote-ic .ic { width: 24px; height: 24px; }
+.remote-bar .btn { flex: 1; font-size: 1.05rem; padding: .75em; }
+body.player.has-remote #app { padding-bottom: 76px; }
+.chip-p .remote-badge .ic { width: .9em; opacity: 1; }
+
 </style>
 </head>
 <body class="player">
@@ -694,6 +711,7 @@ var ICON = {
   next: ic('<path d="M9 5l7 7-7 7"/>'),
   play: ic('<path d="M7 5v14l11-7z" fill="currentColor"/>'),
   eye: ic('<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>'),
+  remote: ic('<rect x="7" y="2" width="10" height="20" rx="3"/><circle cx="12" cy="7" r="1.8"/><path d="M10 12h4M10 15.5h4M10 19h4"/>'),
   full: ic('<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>')
 };
 var esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -734,6 +752,8 @@ var myChoice = null;
 var recvAt = 0;
 var cd = null;
 var editing = false;
+var remoteLabel = null;
+var remoteBusy = false;
 var saved = (() => {
   try {
     return JSON.parse(store.getItem(KEY));
@@ -801,11 +821,17 @@ function start() {
         joined = false;
         unsubs.forEach((u) => u());
         store.removeItem(KEY);
+        updateRemote();
         renderJoin("Tu as \xE9t\xE9 retir\xE9 de la partie.");
         return;
       }
       me = v;
       render();
+      updateRemote();
+    }),
+    db.on(`rooms/${code}/remoteLabel`, (v) => {
+      remoteLabel = v;
+      updateRemote();
     })
   ];
 }
@@ -861,6 +887,34 @@ function renderEditName(msg = "") {
     editing = false;
     render();
   };
+}
+function updateRemote() {
+  let bar = $("#remote");
+  if (!me?.remote || !joined) {
+    bar?.remove();
+    document.body.classList.remove("has-remote");
+    return;
+  }
+  if (!bar) {
+    bar = document.createElement("div");
+    bar.id = "remote";
+    bar.className = "remote-bar";
+    document.body.append(bar);
+    bar.onclick = (e) => {
+      if (!e.target.closest("#rnext") || remoteBusy || !remoteLabel) return;
+      remoteBusy = true;
+      navigator.vibrate?.(30);
+      db.set(`rooms/${code}/control`, { cmd: "next", by: pid, id: uid(), at: db.now() });
+      updateRemote();
+      setTimeout(() => {
+        remoteBusy = false;
+        updateRemote();
+      }, 1200);
+    };
+  }
+  document.body.classList.add("has-remote");
+  bar.innerHTML = `<span class="remote-ic" title="Tu as la t\xE9l\xE9commande">${ICON.remote}</span>
+    <button id="rnext" class="btn primary" ${!remoteLabel || remoteBusy ? "disabled" : ""}>${remoteLabel ? esc(remoteLabel) : "En attente\u2026"} ${ICON.next}</button>`;
 }
 var center = (inner) => `<div class="p-center">${inner}</div>`;
 function render() {

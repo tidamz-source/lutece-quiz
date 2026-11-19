@@ -110,7 +110,8 @@ select { width: auto; padding: .4em .6em; cursor: pointer; }
 .qz-band i { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; color: #fff; }
 .qz-band .shape { width: 15px; height: 15px; }
 .qz h3 { font-size: 1.3rem; overflow-wrap: anywhere; }
-.qz-actions { display: flex; align-items: center; gap: .4rem; margin-top: auto; padding-top: .5rem; }
+.qz-actions { display: flex; align-items: center; flex-wrap: wrap; gap: .4rem; margin-top: auto; padding-top: .5rem; }
+.qz-tools { display: flex; gap: .1rem; margin-left: auto; }
 .tag { align-self: flex-start; font-size: .78rem; font-weight: 600; padding: .25em .7em; border-radius: 99px; }
 .tag.ok { background: rgba(46, 142, 67, .25); color: #7fdc95; }
 .tag.warn { background: rgba(255, 207, 0, .15); color: var(--accent); }
@@ -254,6 +255,7 @@ body.host { height: 100vh; height: 100dvh; overflow: hidden; display: grid; grid
 .pill { background: var(--panel-3); padding: .35em .9em; border-radius: 99px; font-weight: 600; font-size: clamp(.9rem, 1.1vw, 1.15rem); }
 .pill.gold { background: var(--accent); color: var(--accent-ink); }
 .qs-text {
+  position: relative;
   background: #fff; color: var(--bg); text-align: center; padding: .55em 1em; border-radius: 22px;
   font-size: clamp(1.5rem, 3.2vw, 3.4rem); box-shadow: var(--drop); animation: drop-in .4s cubic-bezier(.3, 1.4, .5, 1);
 }
@@ -485,3 +487,63 @@ body.player[data-res] .decor { display: none; }
 .net-error { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 100; width: min(440px, calc(100vw - 32px)); display: grid; gap: .5rem; text-align: center; background: var(--c-red); color: #fff; padding: 1.4rem; border-radius: 20px; box-shadow: var(--drop); }
 .net-error b { font-size: 1.3rem; }
 .net-error small { opacity: .75; overflow-wrap: anywhere; }
+
+/* aperçu */
+.preview-pill { display: inline-flex; align-items: center; gap: .4em; background: var(--c-blue); color: #fff; font-weight: 600; font-size: .9rem; padding: .3em .8em; border-radius: 99px; }
+.qnav { display: inline-flex; align-items: center; gap: .3rem; margin-left: .4rem; }
+.qnav select { max-width: 260px; font-size: .9rem; }
+.bar-l { flex-wrap: wrap; min-width: 0; }
+
+/* joueur : modifier le pseudo */
+.p-back { color: var(--ink); background: rgba(255, 255, 255, .08); margin: -.2rem 0; flex: none; }
+.link-btn { font: inherit; font-size: .9rem; font-weight: 600; color: var(--accent); background: none; border: 0; padding: 0; margin-top: .4rem; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+
+/* pastille points doubles */
+.x2 {
+  position: absolute; top: -.55em; right: -.35em; transform: rotate(12deg);
+  display: grid; place-items: center; width: 2.4em; height: 2.4em; border-radius: 50%;
+  background: var(--accent); color: var(--accent-ink); font-size: .55em; font-weight: 700; line-height: 1;
+  box-shadow: var(--drop); border: 4px solid var(--bg); animation: x2-pop .5s .3s cubic-bezier(.3, 1.6, .5, 1) backwards;
+}
+@keyframes x2-pop { from { transform: rotate(12deg) scale(0); } }
+.x2.sm { position: static; display: inline-grid; width: auto; height: auto; padding: .1em .5em; border-radius: 99px; border: 0; font-size: .85rem; box-shadow: none; transform: none; animation: none; margin-left: .3em; }
+
+/* enchaînement automatique */
+.auto-toggle { font: inherit; font-size: .85rem; font-weight: 600; display: inline-flex; align-items: center; gap: .45em; border: 0; background: transparent; color: var(--muted); cursor: pointer; padding: .3em .5em; border-radius: 10px; }
+.auto-toggle:hover { background: var(--panel-3); color: var(--ink); }
+.auto-toggle i { position: relative; width: 30px; height: 18px; border-radius: 99px; background: var(--panel-3); transition: background .15s; }
+.auto-toggle i::after { content: ''; position: absolute; top: 3px; left: 3px; width: 12px; height: 12px; border-radius: 50%; background: #fff; transition: transform .15s; }
+.auto-toggle.on { color: var(--ink); }
+.auto-toggle.on i { background: var(--c-green); }
+.auto-toggle.on i::after { transform: translateX(12px); }
+#go.counting { background-image: linear-gradient(90deg, rgba(0, 0, 0, .14) calc(var(--p, 0) * 100%), transparent 0); }
+.auto-cd { display: inline-grid; place-items: center; min-width: 1.6em; height: 1.6em; border-radius: 50%; background: var(--accent-ink); color: var(--accent); font-size: .85em; }
+
+/* prêts à reprendre (classement provisoire) */
+.ready-box { display: grid; justify-items: center; gap: .5rem; width: min(560px, 100%); background: var(--panel); border-radius: 18px; padding: .9rem 1.2rem; box-shadow: var(--drop); }
+.ready-count { font-size: clamp(1.1rem, 1.6vw, 1.6rem); font-weight: 600; }
+.ready-count b { color: var(--accent); font-size: 1.4em; }
+.ready-track { width: 100%; height: 12px; border-radius: 99px; background: var(--panel-3); overflow: hidden; }
+.ready-track i { display: block; height: 100%; background: var(--c-green); border-radius: 99px; transition: width .4s cubic-bezier(.3, 1.3, .5, 1); }
+.ready-wait { color: var(--muted); font-size: clamp(.9rem, 1.1vw, 1.1rem); text-align: center; }
+.ready-box.all { background: var(--c-green); animation: bounce-in .45s cubic-bezier(.3, 1.6, .5, 1); }
+.ready-box.all b { font-size: clamp(1.3rem, 2vw, 2rem); }
+.ready-btn { margin-top: .6rem; max-width: 320px; }
+.lb { gap: 1.1rem; }
+
+/* télécommande : menu joueur (grand écran) */
+.chip-p.has-remote { box-shadow: 0 0 0 3px var(--accent), var(--drop); }
+.remote-badge { display: inline-grid; place-items: center; width: 1.5em; height: 1.5em; border-radius: 50%; background: var(--accent); color: var(--accent-ink); }
+.remote-badge .ic { width: .9em; height: .9em; }
+.pmenu { position: fixed; z-index: 60; display: grid; gap: .35rem; min-width: 250px; padding: .7rem; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 16px 40px rgba(0, 0, 0, .5); animation: drop-in .2s; }
+.pmenu b { padding: .2rem .4rem .4rem; font-size: 1.05rem; }
+.pmenu button { font: inherit; font-weight: 600; display: flex; align-items: center; gap: .6rem; text-align: left; border: 0; border-radius: 10px; padding: .65rem .8rem; background: var(--panel-2); color: var(--ink); cursor: pointer; }
+.pmenu button:hover { background: var(--panel-3); }
+.pmenu button.danger { color: #ff8a9a; }
+/* télécommande : barre sur le téléphone */
+.remote-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; display: flex; align-items: center; gap: .7rem; padding: .7rem .9rem calc(.7rem + env(safe-area-inset-bottom)); background: var(--panel); border-top: 2px solid var(--accent); }
+.remote-ic { display: grid; place-items: center; width: 44px; height: 44px; flex: none; border-radius: 12px; background: var(--accent); color: var(--accent-ink); }
+.remote-ic .ic { width: 24px; height: 24px; }
+.remote-bar .btn { flex: 1; font-size: 1.05rem; padding: .75em; }
+body.player.has-remote #app { padding-bottom: 76px; }
+.chip-p .remote-badge .ic { width: .9em; opacity: 1; }

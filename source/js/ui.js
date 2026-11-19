@@ -26,6 +26,8 @@ export const ICON = {
   back: ic('<path d="M15 5l-7 7 7 7"/>'),
   next: ic('<path d="M9 5l7 7-7 7"/>'),
   play: ic('<path d="M7 5v14l11-7z" fill="currentColor"/>'),
+  eye: ic('<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>'),
+  remote: ic('<rect x="7" y="2" width="10" height="20" rx="3"/><circle cx="12" cy="7" r="1.8"/><path d="M10 12h4M10 15.5h4M10 19h4"/>'),
   full: ic('<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>'),
 };
 

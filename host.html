@@ -541,6 +541,23 @@ body.player[data-res] .decor { display: none; }
 .ready-btn { margin-top: .6rem; max-width: 320px; }
 .lb { gap: 1.1rem; }
 
+/* télécommande : menu joueur (grand écran) */
+.chip-p.has-remote { box-shadow: 0 0 0 3px var(--accent), var(--drop); }
+.remote-badge { display: inline-grid; place-items: center; width: 1.5em; height: 1.5em; border-radius: 50%; background: var(--accent); color: var(--accent-ink); }
+.remote-badge .ic { width: .9em; height: .9em; }
+.pmenu { position: fixed; z-index: 60; display: grid; gap: .35rem; min-width: 250px; padding: .7rem; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 16px 40px rgba(0, 0, 0, .5); animation: drop-in .2s; }
+.pmenu b { padding: .2rem .4rem .4rem; font-size: 1.05rem; }
+.pmenu button { font: inherit; font-weight: 600; display: flex; align-items: center; gap: .6rem; text-align: left; border: 0; border-radius: 10px; padding: .65rem .8rem; background: var(--panel-2); color: var(--ink); cursor: pointer; }
+.pmenu button:hover { background: var(--panel-3); }
+.pmenu button.danger { color: #ff8a9a; }
+/* télécommande : barre sur le téléphone */
+.remote-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; display: flex; align-items: center; gap: .7rem; padding: .7rem .9rem calc(.7rem + env(safe-area-inset-bottom)); background: var(--panel); border-top: 2px solid var(--accent); }
+.remote-ic { display: grid; place-items: center; width: 44px; height: 44px; flex: none; border-radius: 12px; background: var(--accent); color: var(--accent-ink); }
+.remote-ic .ic { width: 24px; height: 24px; }
+.remote-bar .btn { flex: 1; font-size: 1.05rem; padding: .75em; }
+body.player.has-remote #app { padding-bottom: 76px; }
+.chip-p .remote-badge .ic { width: .9em; opacity: 1; }
+
 </style>
   <script>
 //---------------------------------------------------------------------
@@ -2994,6 +3011,7 @@ var ICON = {
   next: ic('<path d="M9 5l7 7-7 7"/>'),
   play: ic('<path d="M7 5v14l11-7z" fill="currentColor"/>'),
   eye: ic('<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>'),
+  remote: ic('<rect x="7" y="2" width="10" height="20" rx="3"/><circle cx="12" cy="7" r="1.8"/><path d="M10 12h4M10 15.5h4M10 19h4"/>'),
   full: ic('<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>')
 };
 var esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -3078,6 +3096,9 @@ async function main() {
   let startedAt = 0;
   let closing = false;
   let primary = null;
+  let remoteId = null;
+  let lastCtl = null;
+  let lastRemoteLabel;
   let pod = { seq: [], step: 0 };
   let botTimers = [];
   let pendingCounts = [];
@@ -3127,6 +3148,7 @@ async function main() {
   await db.set(R, { state: { phase: "lobby", title: quiz.title, total }, createdAt: db.now() });
   db.on(`${R}/players`, (v) => {
     players = v || {};
+    if (remoteId && !players[remoteId]) remoteId = null;
     if (phase === "lobby") renderChips();
     if (phase === "question") checkAllAnswered();
     if (phase === "leaderboard") updateReady();
@@ -3186,6 +3208,11 @@ async function main() {
     const n = nPlayers();
     const [label, fn, disabled] = action();
     primary = disabled ? null : fn;
+    const lab = disabled || phase === "end" && pod.step >= pod.seq.length ? null : label;
+    if (!PREVIEW && lab !== lastRemoteLabel) {
+      lastRemoteLabel = lab;
+      db.set(`${R}/remoteLabel`, lab);
+    }
     const showAV = phase === "reveal" && answerMedia[qi];
     bar.innerHTML = `
       <div class="bar-l">${logo()}<span class="bar-brand">Lut\xE8ce <b>Quiz</b></span>
@@ -3303,13 +3330,62 @@ async function main() {
     chips.innerHTML = n ? list.map(([pid, p]) => {
       const isNew = !seen.has(pid);
       seen.add(pid);
-      return `<button class="chip-p ${isNew ? "new" : ""}" data-kick="${pid}" title="Retirer ce joueur">${avatar(p.avatar)}<span>${esc(p.name)}</span>${ICON.x}</button>`;
+      return `<button class="chip-p ${isNew ? "new" : ""} ${pid === remoteId ? "has-remote" : ""}" data-pid="${pid}" title="Options du joueur">${avatar(p.avatar)}<span>${esc(p.name)}</span>${pid === remoteId ? `<span class="remote-badge" title="A la t\xE9l\xE9commande">${ICON.remote}</span>` : ""}</button>`;
     }).join("") : `<p class="waiting">En attente des joueurs\u2026</p>`;
     chips.onclick = (e) => {
-      const b = e.target.closest("[data-kick]");
-      if (b && confirm(`Retirer ${players[b.dataset.kick]?.name} de la partie ?`)) db.remove(`${R}/players/${b.dataset.kick}`);
+      const b = e.target.closest("[data-pid]");
+      if (b) openPlayerMenu(b);
     };
   }
+  function openPlayerMenu(chip) {
+    closePlayerMenu();
+    const pid = chip.dataset.pid;
+    const p = players[pid];
+    if (!p) return;
+    const has = pid === remoteId;
+    const m = document.createElement("div");
+    m.className = "pmenu";
+    m.id = "pmenu";
+    m.innerHTML = `<b>${esc(p.name)}</b>
+      <button data-m="remote">${ICON.remote}<span>${has ? "Reprendre la t\xE9l\xE9commande" : "Donner la t\xE9l\xE9commande"}</span></button>
+      <button data-m="kick" class="danger">${ICON.x}<span>Retirer de la partie</span></button>`;
+    document.body.append(m);
+    const r = chip.getBoundingClientRect();
+    m.style.left = `${Math.min(r.left, innerWidth - m.offsetWidth - 12)}px`;
+    m.style.top = `${Math.min(r.bottom + 8, innerHeight - m.offsetHeight - 12)}px`;
+    m.onclick = (e) => {
+      const a = e.target.closest("[data-m]")?.dataset.m;
+      if (a === "remote") setRemote(has ? null : pid);
+      if (a === "kick") {
+        if (pid === remoteId) setRemote(null);
+        db.remove(`${R}/players/${pid}`);
+      }
+      if (a) closePlayerMenu();
+    };
+    setTimeout(() => document.addEventListener("pointerdown", outsideMenu), 0);
+  }
+  function outsideMenu(e) {
+    if (!e.target.closest("#pmenu")) closePlayerMenu();
+  }
+  function closePlayerMenu() {
+    $("#pmenu")?.remove();
+    document.removeEventListener("pointerdown", outsideMenu);
+  }
+  function setRemote(pid) {
+    const upd = {};
+    if (remoteId && players[remoteId]) upd[`players/${remoteId}/remote`] = null;
+    remoteId = pid;
+    if (pid) upd[`players/${pid}/remote`] = true;
+    db.update(R, upd);
+    renderChips();
+  }
+  db.on(`${R}/control`, (v) => {
+    if (!v || v.id === lastCtl) return;
+    const first = lastCtl === null;
+    lastCtl = v.id;
+    if (first && Date.now() - (v.at || 0) > 5e3) return;
+    if (v.by && v.by === remoteId && v.cmd === "next") next();
+  });
   function startQuestion(i) {
     const q = quiz.questions[i];
     if (q.media?.type === "video" && media[i]) playQuestionVideo(i);

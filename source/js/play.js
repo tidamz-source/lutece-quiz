@@ -21,6 +21,9 @@ let lastQ = -1;
 let myChoice = null;
 let recvAt = 0;
 let cd = null;
+let editing = false;
+let remoteLabel = null; // action « Suivant » proposée par le grand écran
+let remoteBusy = false; // écran « modifier mon pseudo » ouvert
 
 const saved = (() => { try { return JSON.parse(store.getItem(KEY)); } catch { return null; } })();
 if (!code && saved) code = saved.code;
@@ -82,12 +85,15 @@ function start() {
         joined = false;
         unsubs.forEach((u) => u());
         store.removeItem(KEY);
+        updateRemote();
         renderJoin('Tu as été retiré de la partie.');
         return;
       }
       me = v;
       render();
+      updateRemote();
     }),
+    db.on(`rooms/${code}/remoteLabel`, (v) => { remoteLabel = v; updateRemote(); }),
   ];
 }
 
@@ -112,6 +118,64 @@ function updateLobby() {
   $$('.av-grid button').forEach((b) => b.classList.toggle('on', +b.dataset.av === me.avatar));
 }
 
+// Retour depuis la salle d'attente : modifier son pseudo sans quitter la partie (avatar conservé)
+function renderEditName(msg = '') {
+  delete document.body.dataset.res;
+  app.innerHTML = `<header class="p-head"><button class="icon-btn p-back" id="ecancel" aria-label="Retour">${ICON.back}</button><span class="p-name">Modifier mon pseudo</span></header>
+  <form class="join" id="ef" autocomplete="off">
+    ${avatar(me.avatar, 'av-big')}
+    <input name="name" placeholder="Ton pseudo" maxlength="16" value="${esc(me.name)}" aria-label="Pseudo">
+    <button class="btn primary big" id="eb">Valider</button>
+    <p class="err" id="err">${esc(msg)}</p>
+  </form>`;
+  const input = $('[name=name]');
+  input.focus();
+  input.select();
+  $('#ecancel').onclick = () => { editing = false; render(); };
+  $('#ef').onsubmit = async (e) => {
+    e.preventDefault();
+    const n = input.value.trim();
+    const err = $('#err');
+    if (!n) return (err.textContent = 'Choisis un pseudo.');
+    if (n !== me.name) {
+      $('#eb').disabled = true;
+      const ps = (await db.get(`rooms/${code}/players`)) || {};
+      if (Object.entries(ps).some(([id, p]) => id !== pid && p.name.toLowerCase() === n.toLowerCase())) {
+        $('#eb').disabled = false;
+        return (err.textContent = 'Ce pseudo est déjà pris.');
+      }
+      me.name = n;
+      await db.update(`rooms/${code}/players/${pid}`, { name: n });
+      store.setItem(KEY, JSON.stringify({ code, pid, name: n }));
+    }
+    editing = false;
+    render();
+  };
+}
+
+// Télécommande : barre « Suivant » en bas de l'écran, seulement pour le joueur désigné par l'animateur
+function updateRemote() {
+  let bar = $('#remote');
+  if (!me?.remote || !joined) { bar?.remove(); document.body.classList.remove('has-remote'); return; }
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'remote';
+    bar.className = 'remote-bar';
+    document.body.append(bar);
+    bar.onclick = (e) => {
+      if (!e.target.closest('#rnext') || remoteBusy || !remoteLabel) return;
+      remoteBusy = true;
+      navigator.vibrate?.(30);
+      db.set(`rooms/${code}/control`, { cmd: 'next', by: pid, id: uid(), at: db.now() });
+      updateRemote();
+      setTimeout(() => { remoteBusy = false; updateRemote(); }, 1200);
+    };
+  }
+  document.body.classList.add('has-remote');
+  bar.innerHTML = `<span class="remote-ic" title="Tu as la télécommande">${ICON.remote}</span>
+    <button id="rnext" class="btn primary" ${!remoteLabel || remoteBusy ? 'disabled' : ''}>${remoteLabel ? esc(remoteLabel) : 'En attente…'} ${ICON.next}</button>`;
+}
+
 const center = (inner) => `<div class="p-center">${inner}</div>`;
 
 function render() {
@@ -119,6 +183,10 @@ function render() {
   clearInterval(cd);
   const ph = state?.phase || 'closed';
   if (ph === 'question' && state.q !== lastQ) { lastQ = state.q; recvAt = Date.now(); myChoice = null; }
+  if (editing) {
+    if (ph === 'lobby') return $('#ef') ? undefined : renderEditName();
+    editing = false; // la partie a démarré : on ferme l'édition
+  }
   if (ph === 'lobby' && $('.av-grid')) return updateLobby();
 
   const last = me.last && state && me.last.q === state.q ? me.last : null;
@@ -126,13 +194,14 @@ function render() {
   else delete document.body.dataset.res;
   document.body.dataset.phase = ph;
 
-  const head = `<header class="p-head">${avatar(me.avatar)}<span class="p-name">${esc(me.name)}</span>${state?.total && ['video', 'question', 'reveal'].includes(ph) ? `<span class="p-qn">${Math.min((state.q ?? 0) + 1, state.total)}/${state.total}</span>` : ''}</header>`;
+  const head = `<header class="p-head">${ph === 'lobby' ? `<button class="icon-btn p-back" id="pback" aria-label="Modifier mon pseudo">${ICON.back}</button>` : ''}${avatar(me.avatar)}<span class="p-name">${esc(me.name)}</span>${state?.total && ['video', 'question', 'answervideo', 'reveal'].includes(ph) ? `<span class="p-qn">${Math.min((state.q ?? 0) + 1, state.total)}/${state.total}</span>` : ''}</header>`;
   let body = '';
 
   switch (ph) {
     case 'lobby':
       body = `<div class="p-lobby">
-        <div class="p-me">${avatar(me.avatar, 'av-big')}<div><h1>Tu es dans la partie !</h1><p>Choisis ton avatar en attendant le début.</p></div></div>
+        <div class="p-me">${avatar(me.avatar, 'av-big')}<div><h1>Tu es dans la partie !</h1><p>Choisis ton avatar en attendant le début.</p>
+          <button class="link-btn" id="pedit">Modifier mon pseudo</button></div></div>
         <div class="av-grid">${Array.from({ length: AVATAR_COUNT }, (_, i) =>
           `<button data-av="${i}" class="${i === me.avatar ? 'on' : ''}" aria-label="Avatar ${i + 1}">${avatar(i)}</button>`).join('')}</div>
       </div>`;
@@ -144,20 +213,26 @@ function render() {
       body = myChoice !== null
         ? center(`<div class="sent" style="--c:${COLORS[myChoice]}">${shape(myChoice)}</div>${star('run', 'p-star sm')}<h1>Réponse envoyée !</h1><p>Croise les doigts…</p>`)
         : `<div class="p-q">
-            <div class="p-qtop"><span>Question ${state.q + 1}/${state.total}</span><span class="p-cd" id="cd"></span></div>
+            <div class="p-qtop"><span>Question ${state.q + 1}/${state.total}${state.points === 2 ? ' <span class="x2 sm">×2</span>' : ''}</span><span class="p-cd" id="cd"></span></div>
             <p class="p-qtext">${esc(state.text)}</p>
             <div class="p-btns n${state.choices.length}">${state.choices.map((c, j) =>
               `<button data-j="${j}" style="--c:${COLORS[j]}">${shape(j)}<span>${esc(c)}</span></button>`).join('')}</div>
           </div>`;
       break;
+    case 'answervideo':
+      body = center(`${star('point', 'p-star')}<h1>Regarde l'écran !</h1><p>La réponse arrive en vidéo…</p>`);
+      break;
     case 'reveal':
       if (!last) body = center(`${star('scheme', 'p-star')}<h1>Résultats…</h1>`);
-      else if (last.ok) body = center(`<div class="res ok">${ICON.check}</div><h1>Bonne réponse !</h1><p>Ton score reste secret jusqu'à la fin…</p>`);
+      else if (last.ok) body = center(`<div class="res ok">${ICON.check}</div><h1>Bonne réponse !</h1>`);
       else body = center(`<div class="res ko">${ICON.x}</div><h1>${last.answered ? 'Raté !' : 'Trop tard !'}</h1>
         <p>La bonne réponse : <b>${esc(state.choices[state.correct])}</b></p>`);
       break;
     case 'leaderboard':
-      body = center(`${star('point', 'p-star')}<h1>Classement provisoire</h1><p>Regarde le grand écran :<br>es-tu dans le top 10 ?</p>`);
+      body = me.ready === state.q
+        ? center(`<div class="res ok">${ICON.check}</div><h1>C'est noté !</h1><p>On attend les autres…</p><div class="dots"><i></i><i></i><i></i></div>`)
+        : center(`${star('point', 'p-star')}<h1>Classement provisoire</h1><p>Regarde le grand écran :<br>es-tu dans le top 10 ?</p>
+            <button class="btn primary big ready-btn" id="rdy">Je suis prêt !</button>`);
       break;
     case 'end': {
       if (!state.final) { body = center(`${star('scheme', 'p-star')}<h1>Suspense…</h1><p>Le podium se dévoile sur le grand écran.</p>`); break; }
@@ -176,7 +251,16 @@ function render() {
 
   app.innerHTML = head + body;
   if (ph === 'lobby') {
+    $('#pback').onclick = $('#pedit').onclick = () => { editing = true; renderEditName(); };
     $('.av-grid').onclick = (e) => { const b = e.target.closest('[data-av]'); if (b) pickAvatar(+b.dataset.av); };
+  }
+  if (ph === 'leaderboard' && $('#rdy')) {
+    $('#rdy').onclick = () => {
+      navigator.vibrate?.(40);
+      me.ready = state.q;
+      db.update(`rooms/${code}/players/${pid}`, { ready: state.q });
+      render();
+    };
   }
   if (ph === 'question' && myChoice === null) {
     $$('.p-btns button').forEach((b) => (b.onclick = () => answer(+b.dataset.j)));

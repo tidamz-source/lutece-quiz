@@ -66,10 +66,12 @@ function cardHTML(q) {
     <div class="qz-actions">
       <button class="btn primary sm" data-act="launch">${ICON.play} Lancer</button>
       <button class="btn sm" data-act="edit">Modifier</button>
-      <span class="spacer"></span>
-      <button class="icon-btn" data-act="dup" title="Dupliquer">${ICON.dup}</button>
-      <button class="icon-btn" data-act="export" title="Exporter (.json)">${ICON.download}</button>
-      <button class="icon-btn" data-act="del" title="Supprimer">${ICON.trash}</button>
+      <span class="qz-tools">
+        <button class="icon-btn" data-act="preview" title="Aperçu (sans joueurs)">${ICON.eye}</button>
+        <button class="icon-btn" data-act="dup" title="Dupliquer">${ICON.dup}</button>
+        <button class="icon-btn" data-act="export" title="Exporter (.json)">${ICON.download}</button>
+        <button class="icon-btn" data-act="del" title="Supprimer">${ICON.trash}</button>
+      </span>
     </div>
   </article>`;
 }
@@ -116,6 +118,12 @@ async function exportQ(id) {
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 }
 
+// Aperçu : ouvre l'écran de jeu dans un onglet dédié, avec de faux joueurs (rien n'est mis en ligne)
+async function preview(id, q = 0) {
+  if (quiz?.id === id) await commit();
+  window.open(`host.html?quiz=${encodeURIComponent(id)}&preview=1&q=${q}`, 'lutece-preview');
+}
+
 async function launch(id) {
   if (quiz?.id === id) await commit();
   const q = await S.getQuiz(id);
@@ -131,6 +139,7 @@ function renderEditor() {
     <a class="btn ghost sm" href="#">${ICON.back} Mes quiz</a>
     <input class="title-input" data-f="title" value="${esc(quiz.title)}" placeholder="Titre du quiz" aria-label="Titre du quiz" maxlength="80">
     <span class="save-state" id="ss">Enregistré</span>
+    <button class="btn ghost" data-act="preview" title="Tester le quiz sans joueurs">${ICON.eye} Aperçu</button>
     <button class="btn primary" data-act="launch">${ICON.play} Lancer</button>`) + `
   <main class="wrap editor">
     ${quiz.questions.map(qHTML).join('')}
@@ -152,6 +161,7 @@ function qHTML(qq, i) {
       <label class="mini" title="Points">
         <select data-f="points">${POINTS.map(([v, l]) => `<option value="${v}" ${v === qq.points ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
       <span class="tools">
+        <button class="icon-btn" data-act="preview" title="Aperçu à partir de cette question">${ICON.eye}</button>
         <button class="icon-btn" data-act="up" ${i === 0 ? 'disabled' : ''} title="Monter">${ICON.up}</button>
         <button class="icon-btn" data-act="down" ${i === n - 1 ? 'disabled' : ''} title="Descendre">${ICON.down}</button>
         <button class="icon-btn" data-act="dupq" title="Dupliquer">${ICON.dup}</button>
@@ -162,7 +172,7 @@ function qHTML(qq, i) {
     <div class="seg media-seg">${MEDIA_TYPES.map(([t, l, ic]) => `<button class="${mt === t ? 'on' : ''}" data-act="mtype" data-type="${t}">${ic}<span>${l}</span></button>`).join('')}</div>
     ${qq.media ? mediaHTML(qq.media, 'media') : ''}
     ${mt === 'video' ? `<div class="video-note">${ICON.video}<span>La vidéo est lue en entier sur le grand écran, puis les réponses s'affichent et le temps démarre.</span></div>
-    <div class="answer-media"><span class="am-label">Vidéo réponse <small class="muted">(optionnelle, proposée après la révélation)</small></span>
+    <div class="answer-media"><span class="am-label">Vidéo réponse <small class="muted">(optionnelle, lue avant d'afficher les résultats)</small></span>
       ${qq.answerMedia ? mediaHTML(qq.answerMedia, 'answerMedia') : `<button class="btn sm ghost" data-act="addamedia">+ Ajouter une vidéo réponse</button>`}</div>` : ''}
     <div class="ans-head">
       <span class="muted">Réponses · coche la bonne</span>
@@ -252,6 +262,7 @@ app.addEventListener('click', async (e) => {
     case 'new': return newQuizDialog();
     case 'edit': location.hash = `#/edit/${card.dataset.id}`; return;
     case 'launch': return launch(card ? card.dataset.id : quiz.id);
+    case 'preview': return preview(card ? card.dataset.id : quiz.id, i >= 0 ? i : 0);
     case 'dup': await S.duplicateQuiz(await S.getQuiz(card.dataset.id)); toast('Quiz dupliqué'); return renderList();
     case 'export': return exportQ(card.dataset.id);
     case 'del': {
